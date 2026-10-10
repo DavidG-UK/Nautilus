@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import aiohttp
 import aiosqlite
+import asyncio
 import sqlite3
 import time
 from logging.handlers import RotatingFileHandler
@@ -25,6 +26,7 @@ DB_PATH = "bot.db"
 http_session = None
 games_cache = []
 game_status_cache = {}
+previous_game_status_cache = {}
 live_status_messages = {}
 GAME_DETAILS = {
     "battle_box_arena": {"name": "Battle Box Arena", "emoji": 1539777268388331581},
@@ -80,15 +82,6 @@ class Bot(commands.Bot):
 
         async with self.db.execute("PRAGMA max_page_count") as cursor:
             print("Max page count:", await cursor.fetchone())
-
-        import shutil
-
-        total, used, free = shutil.disk_usage("/home/container")
-
-        print(f"Disk total: {total / 1024**3:.2f} GB")
-        print(f"Disk used:  {used / 1024**3:.2f} GB")
-        print(f"Disk free:  {free / 1024**3:.2f} GB")
-
 
     async def add_game_player_records(self, db_records):
         await self.db.executemany(
@@ -180,6 +173,9 @@ async def on_ready():
         if not update_live_statuses.is_running():
             update_live_statuses.start()
 
+        if not update_database.is_running():
+            update_database.start()
+
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
@@ -206,10 +202,10 @@ async def mcci_query(query: str, variables: dict | None = None):
             if "errors" in data:
                 raise Exception(f"GraphQL error: {data['errors']}")
             return data["data"]
-
+    
 async def update_game_status_cache():
     if not games_cache:
-        return
+        return []
 
     fields = []
     variables = {}
@@ -223,8 +219,12 @@ async def update_game_status_cache():
 
     variable_definitions = ", ".join(f"${name}: String!" for name in variables)
 
-    query = f"""query QueueStats({variable_definitions}) {{{" ".join(fields)}}}"""
+    query = (f"query QueueStats({variable_definitions}) "f"{{ {' '.join(fields)} }}")
 
+    return await get_player_count_data(query, variables)
+
+
+async def get_player_count_data(query: str, variables: dict):
     try:
         data = await mcci_query(query, variables)
         game_player_count_records = []
@@ -235,14 +235,31 @@ async def update_game_status_cache():
             player_count = data[alias_name]
             popularity = data[f"{alias_name}_popularity"]
 
-            game_status_cache[game] = {"playerCount": player_count,"popularity": popularity}
+            game_status_cache[game] = {"playerCount": player_count,"popularity": popularity,}
+
             game_player_count_records.append((timestamp, str(game), int(player_count)))
 
-        await bot.add_game_player_records(game_player_count_records)
+        return game_player_count_records
 
     except Exception as error:
-        print(f"Failed to update game status cache")
+        print(f"Failed to update game status cache: {error}")
+        return []
 
+@tasks.loop(hours=1)
+async def update_database():
+    if not games_cache:
+        return
+
+    try:
+        game_player_count_records = await update_game_status_cache()
+
+        if game_player_count_records:
+            await bot.add_game_player_records(game_player_count_records)
+
+    except Exception as error:
+        print(f"Failed to update database: {error}")
+        return
+    
 def format_game_status(game: str, data: dict) -> str:
     game_name = GAME_DETAILS[game]["name"]
     emoji = bot.get_emoji(GAME_DETAILS[game]["emoji"])
