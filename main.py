@@ -4,7 +4,7 @@ from discord import app_commands
 import logging
 import shutil
 import subprocess
-from dotenv import load_dotenv
+from dotenv import load_dotenv  
 import os
 import aiohttp
 import aiosqlite
@@ -299,6 +299,9 @@ def backup_db():
             subprocess.run(["git", "branch", "-M", "main"], cwd=backup_repo_path, check=True)
         else:
             subprocess.run(["git", "remote", "set-url", "origin", url], cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+
+        subprocess.run(["git", "config", "user.name", "Nautilus"], cwd=backup_repo_path, check=True)
+        subprocess.run(["git", "config", "user.email", "nautilusp@nautilus.local"], cwd=backup_repo_path, check=True)
 
         subprocess.run(["git", "add", "bot.db"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         subprocess.run(["git", "commit", "-m", "Backup database"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
