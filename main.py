@@ -305,7 +305,7 @@ def backup_db():
 
         subprocess.run(["git", "add", "bot.db"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         subprocess.run(["git", "commit", "-m", "Backup database"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        subprocess.run(["git", "push", "-f", "-u", "origin", "main"], cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
     except subprocess.CalledProcessError as e:
         print(f"Error occurred while backing up database: {e}")
