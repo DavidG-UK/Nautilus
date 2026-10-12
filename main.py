@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import logging
+import shutil
+import subprocess
 from dotenv import load_dotenv
 import os
 import aiohttp
@@ -82,6 +84,11 @@ class Bot(commands.Bot):
 
         async with self.db.execute("PRAGMA max_page_count") as cursor:
             print("Max page count:", await cursor.fetchone())
+
+    @tasks.loop(hours=24)
+    async def backup(self):
+        print("Running scheduled backup")
+        await asyncio.to_thread(backup_db)
 
     async def add_game_player_records(self, db_records):
         await self.db.executemany(
@@ -176,6 +183,13 @@ async def on_ready():
         if not update_database.is_running():
             update_database.start()
 
+        await asyncio.sleep(5)
+
+        try:
+            await asyncio.to_thread(backup_db)
+        except Exception as e:
+            print(f"Failed to backup database: {e}")
+
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
@@ -223,7 +237,6 @@ async def update_game_status_cache():
 
     return await get_player_count_data(query, variables)
 
-
 async def get_player_count_data(query: str, variables: dict):
     try:
         data = await mcci_query(query, variables)
@@ -259,7 +272,41 @@ async def update_database():
     except Exception as error:
         print(f"Failed to update database: {error}")
         return
+
+def backup_db():
+    try:
+        user = os.getenv("GH_USER")
+        token = os.getenv("GH_DB_TOKEN")
+        url = f"https://{user}:{token}@github.com/{user}/NautilusDatabase.git"
+
+    except Exception as e:
+        print(f"Error occurred while retrieving GitHub credentials: {e}")
+        return
     
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        backup_repo_path = os.path.join(base_dir, "db_backup_repo")
+        db_path = os.path.join(base_dir, "bot.db") 
+
+        os.makedirs(backup_repo_path, exist_ok=True)
+
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, os.path.join(backup_repo_path, "bot.db"))
+
+        if not os.path.exists(os.path.join(backup_repo_path, ".git")):
+            subprocess.run(["git", "init"], cwd=backup_repo_path, check=True)
+            subprocess.run(["git", "remote", "add", "origin", url], cwd=backup_repo_path, check=True)
+            subprocess.run(["git", "branch", "-M", "main"], cwd=backup_repo_path, check=True)
+        else:
+            subprocess.run(["git", "remote", "set-url", "origin", url], cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+
+        subprocess.run(["git", "add", "bot.db"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Backup database"],cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=backup_repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error occurred while backing up database: {e}")
+
 def format_game_status(game: str, data: dict) -> str:
     game_name = GAME_DETAILS[game]["name"]
     emoji = bot.get_emoji(GAME_DETAILS[game]["emoji"])
