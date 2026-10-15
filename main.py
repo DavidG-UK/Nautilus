@@ -183,8 +183,8 @@ async def on_ready():
         if not update_database.is_running():
             update_database.start()
 
-        if not update_database.is_running():
-            update_database.start()
+        if not bot.backup.is_running():
+            bot.backup.start()
 
         await asyncio.sleep(5)
 
