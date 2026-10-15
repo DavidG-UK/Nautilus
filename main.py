@@ -185,7 +185,7 @@ async def on_ready():
 
         if not update_database.is_running():
             update_database.start()
-            
+
         await asyncio.sleep(5)
 
         try:
@@ -404,7 +404,7 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
 
 @bot.tree.command(name="help", description="Get help and information about the bot")
 async def help_command(interaction: discord.Interaction):
-    await interaction.response.send_message("- Use /gamestatus to check the status of a specific game.\n- Use `/livestatus` to create a live updating status message for a game.", ephemeral=True)
+    await interaction.response.send_message("- Use /gamestatus to check the status of a specific game.\n- Use /livestatus to create a live updating status message for a game.", ephemeral=True)
 
 @bot.tree.command(name="gamestatus", description="Get the player count and game status for a requested game")
 @app_commands.describe(game="The game to check, or 'all' to include every game")
